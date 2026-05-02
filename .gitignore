@@ -36,3 +36,8 @@ supabase/.temp/
 
 # Throughput analysis — local-only, regenerate via scripts/garry-output-comparison.ts
 docs/throughput-*.json
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
