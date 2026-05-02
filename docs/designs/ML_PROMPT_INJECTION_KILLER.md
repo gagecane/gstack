@@ -433,7 +433,7 @@ apply to this ML classifier PR:
 - [ ] Create browse/test/security-bench.test.ts (BrowseSafe-Bench harness)
 - [ ] Cache BrowseSafe-Bench dataset for offline CI
 - [ ] Add `test:security-bench` script to package.json
-- [ ] Update CLAUDE.md with security module documentation
+- [ ] Update AGENTS.md with security module documentation
 
 ## References
 

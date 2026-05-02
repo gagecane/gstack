@@ -1,6 +1,6 @@
 # Architecture
 
-This document explains **why** gstack is built the way it is. For setup and commands, see CLAUDE.md. For contributing, see CONTRIBUTING.md.
+This document explains **why** gstack is built the way it is. For setup and commands, see AGENTS.md. For contributing, see CONTRIBUTING.md.
 
 ## The core idea
 

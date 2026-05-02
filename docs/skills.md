@@ -310,7 +310,7 @@ If you want, the agent will research what's already out there in your space — 
 
 After you agree on the system, it generates an interactive HTML preview page — not just swatches and font samples, but realistic product pages. If you are building a dashboard, you see a dashboard with a sidebar, data tables, and stat cards. If you are building a marketing site, you see a hero section with real copy and a CTA. Everything rendered in your design system, with your product name, in light and dark mode. You see what your product could feel like before a single line of production code is written.
 
-Then it writes `DESIGN.md` to your repo root — your project's design source of truth — and updates `CLAUDE.md` so every future Claude Code session respects the system. From that point on, `/design-review` can audit against it, and any agent working on your frontend knows the rules.
+Then it writes `DESIGN.md` to your repo root — your project's design source of truth — and updates `AGENTS.md` so every future session respects the system. From that point on, `/design-review` can audit against it, and any agent working on your frontend knows the rules.
 
 ### Example
 
@@ -373,7 +373,7 @@ Claude: Preview opened in your browser.
 You:    Ship it.
 
 Claude: Wrote DESIGN.md (typography, color, spacing, layout, motion).
-        Updated CLAUDE.md with design system guidelines.
+        Updated AGENTS.md with design system guidelines.
         All future sessions will respect these choices.
 ```
 
@@ -663,7 +663,7 @@ First run on a new project triggers a dry-run walk-through so you can verify the
 
 ### Setup
 
-Run `/setup-deploy` first. It detects your platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, or custom), discovers your production URL and health check endpoints, and writes the config to CLAUDE.md. One-time, 60 seconds.
+Run `/setup-deploy` first. It detects your platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, or custom), discovers your production URL and health check endpoints, and writes the config to AGENTS.md. One-time, 60 seconds.
 
 ### Example
 
@@ -760,7 +760,7 @@ You:   /document-release
 Claude: Analyzing 21 files changed across 3 commits. Found 8 documentation files.
 
         README.md: updated skill count from 9 to 10, added new skill to table
-        CLAUDE.md: added new directory to project structure
+        AGENTS.md: added new directory to project structure
         CONTRIBUTING.md: current — no changes needed
         TODOS.md: marked 2 items complete, added 1 new item
 
@@ -993,7 +993,7 @@ Claude: Launched GStack Browser with sidebar extension.
 
 One-time deploy configuration. Run this before your first `/land-and-deploy`.
 
-It auto-detects your deploy platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, or custom), discovers your production URL, health check endpoints, and deploy status commands. Writes everything to CLAUDE.md so all future deploys are automatic.
+It auto-detects your deploy platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, or custom), discovers your production URL, health check endpoints, and deploy status commands. Writes everything to AGENTS.md so all future deploys are automatic.
 
 ```
 You:   /setup-deploy
@@ -1004,7 +1004,7 @@ Claude: Detected: Fly.io (fly.toml found)
         Deploy command: fly deploy
         Status command: fly status
 
-        Written to CLAUDE.md. Run /land-and-deploy when ready.
+        Written to AGENTS.md. Run /land-and-deploy when ready.
 ```
 
 ---

@@ -24,7 +24,7 @@ export const ROOT = path.resolve(import.meta.dir, '..', '..');
 // BLAME PROTOCOL: When an eval fails, do NOT claim "pre-existing" or "not related
 // to our changes" without proof. Run the same eval on main to verify. These tests
 // have invisible couplings — preamble text, SKILL.md content, and timing all affect
-// agent behavior. See CLAUDE.md "E2E eval failure blame protocol" for details.
+// agent behavior. See AGENTS.md "E2E eval failure blame protocol" for details.
 export const evalsEnabled = !!process.env.EVALS;
 
 // --- Diff-based test selection ---

@@ -31,7 +31,7 @@ Classification: INFORMATIONAL (never blocks merge, just surfaces the pattern).
 
 Fix-First heuristic applies: if the finding is an empty catch around a file op,
 auto-fix with `safeUnlink()`. If it's a catch-and-log in extension code, skip
-(that's the correct pattern per CLAUDE.md guidelines).
+(that's the correct pattern per AGENTS.md guidelines).
 
 ### /ship (Step 3.5, pre-landing review + PR body)
 
@@ -50,7 +50,7 @@ independently. It shows up inside Eng Review output, not as its own dashboard en
 
 ## What to auto-fix vs what to skip
 
-Follow CLAUDE.md "Slop-scan" section. Summary:
+Follow AGENTS.md "Slop-scan" section. Summary:
 
 **Auto-fix (genuine quality improvements):**
 - Empty catch around `fs.unlinkSync` → replace with `safeUnlink()`

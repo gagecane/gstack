@@ -244,7 +244,7 @@ Auto-retry once on failure. If still fails, present anyway with a warning.
 **5. Output location: explorations in /tmp, approved finals in `docs/designs/`**
 - Exploration variants go to `/tmp/gstack-mockups-{session}/` (ephemeral, not committed)
 - Only the **user-approved final** mockup gets saved to `docs/designs/` (checked in)
-- Default output directory configurable via CLAUDE.md `design_output_dir` setting
+- Default output directory configurable via AGENTS.md `design_output_dir` setting
 - Filename pattern: `{skill}-{description}-{timestamp}.png`
 - Create `docs/designs/` if it doesn't exist (mkdir -p)
 - Design doc references the committed image path
@@ -253,7 +253,7 @@ Auto-retry once on failure. If still fails, present anyway with a warning.
 - Fallback: if not in a git repo, save to `/tmp/gstack-mockup-{timestamp}.png`
 
 **6. Trust boundary acknowledgment**
-Default-on generation sends design brief text to OpenAI. This is a new external data flow vs. the existing HTML wireframe path which is entirely local. The brief contains only abstract design descriptions (goal, style, elements), never source code or user data. Screenshots from $B are NOT sent to OpenAI (the reference field in DesignBrief is a local file path used by the agent, not uploaded to the API). Document this in CLAUDE.md.
+Default-on generation sends design brief text to OpenAI. This is a new external data flow vs. the existing HTML wireframe path which is entirely local. The brief contains only abstract design descriptions (goal, style, elements), never source code or user data. Screenshots from $B are NOT sent to OpenAI (the reference field in DesignBrief is a local file path used by the agent, not uploaded to the API). Document this in AGENTS.md.
 
 **7. Rate limit mitigation**
 Variant generation uses staggered parallel: start each API call 1 second apart via `Promise.allSettled()` with delays. This avoids the 5-7 RPM rate limit on image generation while still being faster than fully serial. If any call 429s, retry with exponential backoff (2s, 4s, 8s).

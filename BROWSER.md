@@ -595,7 +595,7 @@ The "Send to Code" button injects a description into the Claude PTY.
 | Terminal agent | `browse/src/terminal-agent.ts` | PTY spawn, lifecycle, auth |
 | Sidebar utilities | `browse/src/sidebar-utils.ts` | URL sanitization, helpers |
 
-Before modifying any of these, read the comment block in `CLAUDE.md` under
+Before modifying any of these, read the comment block in `AGENTS.md` under
 "Sidebar architecture" — silent failures here usually trace to not understanding
 the cross-component flow.
 
@@ -1269,7 +1269,7 @@ cp browse/dist/browse ~/.claude/skills/gstack/browse/dist/browse
 ## Cross-references
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system-level architecture, dual-listener tunnel design, prompt-injection defense threat model
-- [`CLAUDE.md`](CLAUDE.md) — project-level instructions, sidebar architecture notes, security-stack constraints
+- [`AGENTS.md`](AGENTS.md) — project-level instructions, sidebar architecture notes, security-stack constraints
 - [`docs/REMOTE_BROWSER_ACCESS.md`](docs/REMOTE_BROWSER_ACCESS.md) — operator guide for `/pair-agent` (setup keys, scoped tokens, denial log)
 - [`docs/designs/BROWSER_SKILLS_V1.md`](docs/designs/BROWSER_SKILLS_V1.md) — design doc for browser-skills runtime (Phase 1 + 2a + roadmap)
 - [`scrape/SKILL.md`](scrape/SKILL.md) — `/scrape` skill: match-or-prototype data extraction
