@@ -26,11 +26,14 @@ const ROOT = path.resolve(import.meta.dir, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // ─── Host Detection (config-driven) ─────────────────────────
+// Default host is 'kiro' on the kiro-only-exploration branch. Other hosts
+// (claude, codex, etc.) remain supported via --host; `--host all` iterates
+// every host and is what `bun run build` uses to populate the full tree.
 
 const HOST_ARG = process.argv.find(a => a.startsWith('--host'));
 type HostArg = Host | 'all';
 const HOST_ARG_VAL: HostArg = (() => {
-  if (!HOST_ARG) return 'claude';
+  if (!HOST_ARG) return 'kiro';
   const val = HOST_ARG.includes('=') ? HOST_ARG.split('=')[1] : process.argv[process.argv.indexOf(HOST_ARG) + 1];
   if (val === 'all') return 'all';
   try {
@@ -41,7 +44,7 @@ const HOST_ARG_VAL: HostArg = (() => {
 })();
 
 // For single-host mode, HOST is the host. For --host all, it's set per iteration below.
-let HOST: Host = HOST_ARG_VAL === 'all' ? 'claude' : HOST_ARG_VAL;
+let HOST: Host = HOST_ARG_VAL === 'all' ? 'kiro' : HOST_ARG_VAL;
 
 // ─── Model Overlay Selection ────────────────────────────────
 // --model is explicit. We do NOT auto-detect from host (host ≠ model).
@@ -400,7 +403,7 @@ function processExternalHost(
   return { content: result, outputPath, outputDir, symlinkLoop };
 }
 
-function processTemplate(tmplPath: string, host: Host = 'claude'): { outputPath: string; content: string; symlinkLoop?: boolean } {
+function processTemplate(tmplPath: string, host: Host = 'kiro'): { outputPath: string; content: string; symlinkLoop?: boolean } {
   const tmplContent = fs.readFileSync(tmplPath, 'utf-8');
   const relTmplPath = path.relative(ROOT, tmplPath);
   let outputPath = tmplPath.replace(/\.tmpl$/, '');

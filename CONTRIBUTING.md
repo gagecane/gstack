@@ -263,7 +263,8 @@ to produce host-appropriate output (different frontmatter, paths, tool names).
 
 ```bash
 # Generate for a specific host
-bun run gen:skill-docs                    # Claude (default)
+bun run gen:skill-docs                    # Kiro (default on kiro-only-exploration)
+bun run gen:skill-docs --host claude      # Claude Code layout (root SKILL.md files)
 bun run gen:skill-docs --host codex       # Codex
 bun run gen:skill-docs --host opencode    # OpenCode
 bun run gen:skill-docs --host all         # All 8 hosts

@@ -63,9 +63,11 @@ function mkEvalRoot(suffix: string, includeOverlay: boolean): string {
   // model's overlay. If includeOverlay is false we'll re-regen at default
   // later just for the root SKILL.md copy. For individual skills, opus-4-7
   // content doesn't matter for the routing test (we only need discovery).
+  // Default host is now kiro; this test reads root (claude-layout) SKILL.md
+  // files, so pin --host claude explicitly.
   const result = spawnSync(
     'bun',
-    ['run', 'scripts/gen-skill-docs.ts', '--model', includeOverlay ? 'opus-4-7' : 'claude'],
+    ['run', 'scripts/gen-skill-docs.ts', '--host', 'claude', '--model', includeOverlay ? 'opus-4-7' : 'claude'],
     { cwd: ROOT, stdio: 'pipe', encoding: 'utf-8', timeout: 60_000 },
   );
   if (result.status !== 0) {
@@ -162,9 +164,11 @@ describeE2E('Opus 4.7 overlay behavior evals', () => {
     evalCollector?.finalize();
     // Restore working tree: mkEvalRoot runs `gen-skill-docs` with various
     // --model flags, leaving the in-repo SKILL.md files generated at
-    // whichever model ran last. Reset to the default (claude) so the tree
-    // matches what would be checked in.
-    spawnSync('bun', ['run', 'scripts/gen-skill-docs.ts'], {
+    // whichever model ran last. Reset to claude layout (unfolded claude
+    // overlay, no model overlay) so the in-tree root SKILL.md files match
+    // what would be checked in. Default host is now kiro, so pass --host
+    // claude explicitly.
+    spawnSync('bun', ['run', 'scripts/gen-skill-docs.ts', '--host', 'claude'], {
       cwd: ROOT,
       stdio: 'pipe',
       timeout: 60_000,

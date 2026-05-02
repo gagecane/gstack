@@ -215,7 +215,11 @@ describe('gen-skill-docs', () => {
   });
 
   test('generated files are fresh (match --dry-run)', () => {
-    const result = Bun.spawnSync(['bun', 'run', 'scripts/gen-skill-docs.ts', '--dry-run'], {
+    // Explicit --host claude: this test inspects the in-tree root SKILL.md
+    // files (claude layout). The default host is kiro, which emits under
+    // .kiro/skills/gstack/ instead of root — that tree is validated by the
+    // parameterized host smoke tests below.
+    const result = Bun.spawnSync(['bun', 'run', 'scripts/gen-skill-docs.ts', '--host', 'claude', '--dry-run'], {
       cwd: ROOT,
       stdout: 'pipe',
       stderr: 'pipe',
