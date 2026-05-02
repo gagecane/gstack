@@ -1,0 +1,40 @@
+# Fast pre-commit sanity check: compile all Bun entry points.
+#
+# Why this exists: polecats previously only discovered broken TS at
+# refinery-gate time (the 'build' gate, up to 10m). This catches unresolved
+# imports and syntax errors at commit time in ~2s.
+#
+# Why `bun build --compile` and not `tsc --noEmit`:
+#   - No tsconfig.json or local typescript install in this repo.
+#   - `bun x tsc` would network-fetch tsc on every commit (slow, flaky).
+#   - `bun build --compile` catches what matters for pre-commit: import
+#     resolution, syntax errors, missing files. It does NOT do full type
+#     inference. That's fine; the refinery still runs `bun run build`.
+#
+# Skip entirely with `git commit --no-verify` or `HUSKY=0 git commit ...`.
+
+set -e
+
+# Only run if staged changes include TypeScript/JavaScript source.
+# Avoids paying the ~2s cost on doc-only or config-only commits.
+staged_ts=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|js|mjs|cjs)$' || true)
+if [ -z "$staged_ts" ]; then
+  exit 0
+fi
+
+echo "husky: compile-checking entry points (bun build --compile)..."
+
+# Build to /tmp so we don't touch tracked dist/ files.
+tmp=$(mktemp -d -t gstack-precommit.XXXXXX)
+trap 'rm -rf "$tmp"' EXIT
+
+# Mirror the 5 compile steps from `bun run build` (without the asset/docs
+# generation). These are the real parse+resolve checks. Keep in sync with
+# the "build" script in package.json.
+bun build --compile browse/src/cli.ts              --outfile "$tmp/browse"          >/dev/null
+bun build --compile browse/src/find-browse.ts      --outfile "$tmp/find-browse"     >/dev/null
+bun build --compile design/src/cli.ts              --outfile "$tmp/design"          >/dev/null
+bun build --compile make-pdf/src/cli.ts            --outfile "$tmp/pdf"             >/dev/null
+bun build --compile bin/gstack-global-discover.ts  --outfile "$tmp/discover"        >/dev/null
+
+echo "husky: compile-check passed."
