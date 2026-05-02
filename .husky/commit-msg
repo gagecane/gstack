@@ -1,0 +1,12 @@
+commit_msg_file=$1
+commit_msg=$(head -1 "$commit_msg_file")
+
+if ! echo "$commit_msg" | grep -qE '^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([a-z0-9-]+\))?!?: .+'; then
+  echo "ERROR: Commit message does not follow Conventional Commits format."
+  echo "Expected: <type>(<optional-scope>): <description>"
+  echo "Types: feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert"
+  echo "Example: feat(lambda): add new handler"
+  echo ""
+  echo "Your message: $commit_msg"
+  exit 1
+fi
