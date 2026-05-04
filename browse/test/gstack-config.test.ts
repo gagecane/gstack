@@ -41,8 +41,18 @@ afterEach(() => {
 
 describe('gstack-config', () => {
   // ─── get ──────────────────────────────────────────────────
-  test('get on missing file returns empty, exit 0', () => {
+  test('get on missing file returns DEFAULTS value for known key', () => {
+    // DEFAULTS table falls back when no config file exists. auto_upgrade's
+    // documented default is 'false' (see CONFIG_HEADER + lookup_default in
+    // bin/gstack-config).
     const { exitCode, stdout } = run(['get', 'auto_upgrade']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe('false');
+  });
+
+  test('get on missing file returns empty for unknown key', () => {
+    // Unknown keys still return empty — DEFAULTS only covers documented keys.
+    const { exitCode, stdout } = run(['get', 'unknown_custom_key']);
     expect(exitCode).toBe(0);
     expect(stdout).toBe('');
   });
@@ -54,7 +64,7 @@ describe('gstack-config', () => {
     expect(stdout).toBe('true');
   });
 
-  test('get missing key returns empty', () => {
+  test('get missing key returns empty when key is not in DEFAULTS', () => {
     writeFileSync(join(stateDir, 'config.yaml'), 'auto_upgrade: true\n');
     const { exitCode, stdout } = run(['get', 'nonexistent']);
     expect(exitCode).toBe(0);
@@ -110,10 +120,14 @@ describe('gstack-config', () => {
     expect(stdout).toContain('update_check: false');
   });
 
-  test('list on missing file returns empty, exit 0', () => {
+  test('list on missing file shows DEFAULTS (documented keys with [default] source)', () => {
+    // After DEFAULTS was added, `list` walks the DEFAULTS table even when the
+    // config file is absent. Each documented key appears with its default
+    // value and a `(default)` source label.
     const { exitCode, stdout } = run(['list']);
     expect(exitCode).toBe(0);
-    expect(stdout).toBe('');
+    expect(stdout).toContain('auto_upgrade:');
+    expect(stdout).toContain('(default)');
   });
 
   // ─── usage ────────────────────────────────────────────────
@@ -176,9 +190,10 @@ describe('gstack-config', () => {
   });
 
   // ─── routing_declined ──────────────────────────────────────
-  test('routing_declined defaults to empty (not set)', () => {
+  test('routing_declined defaults to false (documented default)', () => {
+    // routing_declined is in the DEFAULTS table with value 'false'.
     const { stdout } = run(['get', 'routing_declined']);
-    expect(stdout).toBe('');
+    expect(stdout).toBe('false');
   });
 
   test('routing_declined can be set and read', () => {
