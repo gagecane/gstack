@@ -296,8 +296,13 @@ if [ "$NEEDS_AGENTS_GEN" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
   log "Generating .agents/ skill docs..."
   (
     cd "$SOURCE_GSTACK_DIR"
-    bun install --frozen-lockfile 2>/dev/null || bun install
-    bun run gen:skill-docs --host codex
+    if [ "$QUIET" -eq 1 ]; then
+      bun install --frozen-lockfile >/dev/null 2>&1 || bun install >/dev/null 2>&1
+      bun run gen:skill-docs --host codex >/dev/null 2>&1
+    else
+      bun install --frozen-lockfile 2>/dev/null || bun install
+      bun run gen:skill-docs --host codex
+    fi
   )
 fi
 
@@ -306,8 +311,13 @@ if [ "$INSTALL_FACTORY" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
   log "Generating .factory/ skill docs..."
   (
     cd "$SOURCE_GSTACK_DIR"
-    bun install --frozen-lockfile 2>/dev/null || bun install
-    bun run gen:skill-docs --host factory
+    if [ "$QUIET" -eq 1 ]; then
+      bun install --frozen-lockfile >/dev/null 2>&1 || bun install >/dev/null 2>&1
+      bun run gen:skill-docs --host factory >/dev/null 2>&1
+    else
+      bun install --frozen-lockfile 2>/dev/null || bun install
+      bun run gen:skill-docs --host factory
+    fi
   )
 fi
 
@@ -316,8 +326,13 @@ if [ "$INSTALL_OPENCODE" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
   log "Generating .opencode/ skill docs..."
   (
     cd "$SOURCE_GSTACK_DIR"
-    bun install --frozen-lockfile 2>/dev/null || bun install
-    bun run gen:skill-docs --host opencode
+    if [ "$QUIET" -eq 1 ]; then
+      bun install --frozen-lockfile >/dev/null 2>&1 || bun install >/dev/null 2>&1
+      bun run gen:skill-docs --host opencode >/dev/null 2>&1
+    else
+      bun install --frozen-lockfile 2>/dev/null || bun install
+      bun run gen:skill-docs --host opencode
+    fi
   )
 fi
 
@@ -909,9 +924,9 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
           -e "s|~/.claude/skills/gstack|~/.kiro/skills/gstack|g" \
           "$skill_dir/SKILL.md" > "$target_dir/SKILL.md"
     done
-    echo "gstack ready (kiro)."
-    echo "  browse: $BROWSE_BIN"
-    echo "  kiro skills: $KIRO_SKILLS"
+    log "gstack ready (kiro)."
+    log "  browse: $BROWSE_BIN"
+    log "  kiro skills: $KIRO_SKILLS"
   fi
 fi
 
@@ -920,9 +935,9 @@ if [ "$INSTALL_FACTORY" -eq 1 ]; then
   mkdir -p "$FACTORY_SKILLS"
   create_factory_runtime_root "$SOURCE_GSTACK_DIR" "$FACTORY_GSTACK"
   link_factory_skill_dirs "$SOURCE_GSTACK_DIR" "$FACTORY_SKILLS"
-  echo "gstack ready (factory)."
-  echo "  browse: $BROWSE_BIN"
-  echo "  factory skills: $FACTORY_SKILLS"
+  log "gstack ready (factory)."
+  log "  browse: $BROWSE_BIN"
+  log "  factory skills: $FACTORY_SKILLS"
 fi
 
 # 6c. Install for OpenCode
@@ -930,9 +945,9 @@ if [ "$INSTALL_OPENCODE" -eq 1 ]; then
   mkdir -p "$OPENCODE_SKILLS"
   create_opencode_runtime_root "$SOURCE_GSTACK_DIR" "$OPENCODE_GSTACK"
   link_opencode_skill_dirs "$SOURCE_GSTACK_DIR" "$OPENCODE_SKILLS"
-  echo "gstack ready (opencode)."
-  echo "  browse: $BROWSE_BIN"
-  echo "  opencode skills: $OPENCODE_SKILLS"
+  log "gstack ready (opencode)."
+  log "  browse: $BROWSE_BIN"
+  log "  opencode skills: $OPENCODE_SKILLS"
 fi
 
 # 7. Create .agents/ sidecar symlinks for the real Codex skill target.
