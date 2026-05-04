@@ -374,11 +374,22 @@ describe('host-config-export.ts CLI', () => {
     expect(exitCode).toBe(1);
   });
 
-  test('detect finds claude (since we are running in claude)', () => {
+  test('detect finds at least one installed host', () => {
+    // `detect` prints one host name per line for every host whose CLI binary
+    // is on PATH. The kiro-only-exploration branch makes kiro the default
+    // install target, so kiro-cli is the expected detection in this test
+    // environment. Previously this test hardcoded `claude` — that assumption
+    // broke when the default host flipped.
     const { stdout, exitCode } = run('detect');
     expect(exitCode).toBe(0);
-    // claude binary should be on PATH in this environment
-    expect(stdout).toContain('claude');
+    // At least one line of output (some CLI on PATH). Exact host varies by env.
+    const detected = stdout.trim().split('\n').filter(Boolean);
+    expect(detected.length).toBeGreaterThan(0);
+    // Detection must return a known host name, not a shell error string.
+    const { ALL_HOST_NAMES } = require(path.join(ROOT, 'hosts', 'index.ts'));
+    for (const name of detected) {
+      expect(ALL_HOST_NAMES).toContain(name);
+    }
   });
 
   test('unknown command exits 1', () => {
