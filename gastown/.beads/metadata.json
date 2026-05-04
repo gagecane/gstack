@@ -1,0 +1,7 @@
+{
+  "database": "beads.db",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "gsk",
+  "project_id": "07f9624b-b545-4a0c-9481-18d6a0659c8a"
+}
