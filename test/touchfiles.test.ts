@@ -188,7 +188,11 @@ describe('detectBaseBranch', () => {
     const run = (cmd: string, args: string[]) =>
       spawnSync(cmd, args, { cwd: dir, stdio: 'pipe', timeout: 5000 });
 
-    run('git', ['init']);
+    // Force initial-branch=main — users' git configs may default to something
+    // else (`mainline`, `trunk`, etc.). detectBaseBranch only probes for
+    // `main`/`master`, so the test needs to explicitly create the branch it
+    // expects to find.
+    run('git', ['init', '-b', 'main']);
     run('git', ['config', 'user.email', 'test@test.com']);
     run('git', ['config', 'user.name', 'Test']);
     fs.writeFileSync(path.join(dir, 'test.txt'), 'hello\n');
@@ -196,7 +200,7 @@ describe('detectBaseBranch', () => {
     run('git', ['commit', '-m', 'init']);
 
     const result = detectBaseBranch(dir);
-    // Should find 'main' (or 'master' depending on git default)
+    // Should find 'main' (or 'master' if -b main was unsupported on very old git)
     expect(result).toMatch(/^(main|master)$/);
 
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
