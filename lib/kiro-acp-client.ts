@@ -13,7 +13,8 @@
  *     callers that want them batched)
  *   - pluggable handlers for agent→client RPCs (session/request_permission,
  *     fs/read_text_file, fs/write_text_file, terminal/* family)
- *   - binary resolution honoring GSTACK_KIRO_CLI_BIN
+ *   - re-exports `resolveKiroCliBinary` from `browse/src/kiro-bin.ts` for
+ *     callers that already import it from this module
  *
  * Out of scope here:
  *   - The full typed ACP schema (gsk-9p0.3 will generate it from Zed's schema
@@ -21,15 +22,17 @@
  *     surface this client actually needs to operate — enough to compile
  *     preflight-agent-sdk.ts and shape downstream AgentSdkResult-compatible
  *     summaries.
- *   - A richer binary resolver with install-path probing (gsk-9p0.2 will
- *     extract `browse/src/kiro-bin.ts` parallel to `browse/src/claude-bin.ts`).
- *     The implementation here matches the inline version in preflight — when
- *     kiro-bin.ts lands, callers switch over and this file's resolver goes away.
+ *   - Binary resolution is implemented in `browse/src/kiro-bin.ts` (extracted
+ *     under gsk-9p0.2, parallel to `browse/src/claude-bin.ts`). New callers
+ *     should import directly from `browse/src/kiro-bin`.
  *
  * No dependency on `@anthropic-ai/claude-agent-sdk`. Bun-native spawn + streams.
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { resolveKiroCliBinary } from '../browse/src/kiro-bin';
+
+export { resolveKiroCliBinary };
 
 // ---------------------------------------------------------------------------
 // JSON-RPC 2.0 primitives
@@ -115,32 +118,6 @@ export interface AcpRunResult {
   durationMs: number | null;
   /** Last `_kiro.dev/metadata.contextUsagePercentage` seen. */
   contextUsagePercent: number | null;
-}
-
-// ---------------------------------------------------------------------------
-// Binary resolution (inline, mirrors scripts/preflight-agent-sdk.ts)
-// gsk-9p0.2 extracts this to browse/src/kiro-bin.ts alongside claude-bin.ts.
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the `kiro-cli` binary for pinning, honoring GSTACK_KIRO_CLI_BIN.
- * Returns null when nothing resolves — callers should surface a clear error.
- *
- * Override precedence:
- *   1. `env.GSTACK_KIRO_CLI_BIN` — absolute path or PATH-resolvable command
- *   2. `Bun.which('kiro-cli')`
- */
-export function resolveKiroCliBinary(
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  const PATH = env.PATH ?? env.Path ?? '';
-  const override = env.GSTACK_KIRO_CLI_BIN?.trim();
-  if (override) {
-    // Absolute path on POSIX or Windows: use as-is. Otherwise PATH-resolve.
-    if (override.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(override)) return override;
-    return Bun.which(override, { PATH }) ?? null;
-  }
-  return Bun.which('kiro-cli', { PATH });
 }
 
 // ---------------------------------------------------------------------------
