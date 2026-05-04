@@ -31,6 +31,7 @@
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { resolveKiroCliBinary } from '../browse/src/kiro-bin';
 import { readOverlay } from './resolvers/model-overlay';
 
 /** Smoke-test model: cheapest non-experimental, rate_multiplier 0.4. */
@@ -38,31 +39,6 @@ const SMOKE_MODEL = 'claude-haiku-4.5';
 
 /** Hard ceiling for each ACP call. The entire preflight finishes in <15s live. */
 const ACP_RPC_TIMEOUT_MS = 30_000;
-
-// ---------------------------------------------------------------------------
-// kiro-cli binary resolver (inline, parallel to browse/src/claude-bin.ts).
-// Deliberately kept here — a separate bead will extract to browse/src/kiro-bin.ts
-// once more callers need it.
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the `kiro-cli` binary for pinning, honoring the gstack override env.
- * Returns null when nothing resolves — callers should report a clear failure.
- *
- * Override precedence:
- *   1. GSTACK_KIRO_CLI_BIN (absolute path or PATH-resolvable command)
- *   2. `Bun.which('kiro-cli')`
- */
-function resolveKiroCliBinary(env: NodeJS.ProcessEnv = process.env): string | null {
-  const PATH = env.PATH ?? env.Path ?? '';
-  const override = env.GSTACK_KIRO_CLI_BIN?.trim();
-  if (override) {
-    // Absolute path: use as-is. Otherwise PATH-resolve.
-    if (override.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(override)) return override;
-    return Bun.which(override, { PATH }) ?? null;
-  }
-  return Bun.which('kiro-cli', { PATH });
-}
 
 // ---------------------------------------------------------------------------
 // Minimal ACP client. JSON-RPC 2.0, newline-delimited, over kiro-cli stdio.
