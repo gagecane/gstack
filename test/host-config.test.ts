@@ -374,11 +374,13 @@ describe('host-config-export.ts CLI', () => {
     expect(exitCode).toBe(1);
   });
 
-  test('detect finds claude (since we are running in claude)', () => {
+  test('detect finds a host on PATH', () => {
     const { stdout, exitCode } = run('detect');
     expect(exitCode).toBe(0);
-    // claude binary should be on PATH in this environment
-    expect(stdout).toContain('claude');
+    // The host CLI that was used to run this test should be detected.
+    // In claude-code we'd get 'claude', in kiro-cli we'd get 'kiro', etc.
+    expect(stdout.length).toBeGreaterThan(0);
+    expect(stdout).toMatch(/^(claude|kiro|codex|cursor|openclaw|hermes|factory|opencode|slate|gbrain)$/);
   });
 
   test('unknown command exits 1', () => {

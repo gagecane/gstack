@@ -188,7 +188,10 @@ describe('detectBaseBranch', () => {
     const run = (cmd: string, args: string[]) =>
       spawnSync(cmd, args, { cwd: dir, stdio: 'pipe', timeout: 5000 });
 
-    run('git', ['init']);
+    // Pin the initial branch so the test is deterministic regardless of
+    // the caller's git init.defaultBranch config (e.g. Amazon hosts set
+    // it to 'mainline').
+    run('git', ['init', '--initial-branch=main']);
     run('git', ['config', 'user.email', 'test@test.com']);
     run('git', ['config', 'user.name', 'Test']);
     fs.writeFileSync(path.join(dir, 'test.txt'), 'hello\n');
