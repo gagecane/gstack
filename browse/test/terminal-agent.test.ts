@@ -196,10 +196,93 @@ describe('Source-level guard: terminal-agent', () => {
     expect(hint).toContain('tab-each');
     // And it must be passed via --append-system-prompt at spawn time
     // (NOT written into the PTY as user input — that would pollute the
-    // visible transcript).
-    const spawn = AGENT_SRC.slice(AGENT_SRC.indexOf('function spawnClaude'));
-    expect(spawn).toContain("'--append-system-prompt'");
-    expect(spawn).toContain('tabHint');
+    // visible transcript). The injection lives inside spawnAgent now
+    // (host-aware generalization for gsk-dvd.3); spawnClaude is a thin
+    // back-compat shim over spawnAgent. We scope to the spawnAgent body
+    // so the assertion proves the tab hint still ships with claude.
+    const agentSpawn = AGENT_SRC.slice(
+      AGENT_SRC.indexOf('function spawnAgent'),
+      AGENT_SRC.indexOf('function spawnClaude('),
+    );
+    expect(agentSpawn).toContain("'--append-system-prompt'");
+    expect(agentSpawn).toContain('tabHint');
+    // Tab-hint injection must be gated on host === 'claude'. kiro-cli
+    // does not support --append-system-prompt and would abort on it, so
+    // source-level we require the claude-only branch.
+    expect(agentSpawn).toContain("agent.host === 'claude'");
+  });
+
+  test('host routing: resolveAgent picks between claude and kiro-cli', () => {
+    // gsk-dvd.3 — the agent resolves which binary to spawn based on the
+    // GSTACK_HOST env var. Source-level we lock in:
+    //   (a) both resolver imports are wired up (claude-bin + kiro-bin),
+    //   (b) a normalized host preference is read from GSTACK_HOST, and
+    //   (c) the auto path prefers claude but falls back to kiro-cli.
+    // This prevents a future refactor from silently dropping kiro support.
+    expect(AGENT_SRC).toContain("from './claude-bin'");
+    expect(AGENT_SRC).toContain("from './kiro-bin'");
+    expect(AGENT_SRC).toContain('function readHostPreference');
+    expect(AGENT_SRC).toContain("env.GSTACK_HOST");
+    expect(AGENT_SRC).toContain('function resolveAgent');
+    const resolve = AGENT_SRC.slice(AGENT_SRC.indexOf('function resolveAgent'));
+    // Explicit pref branches
+    expect(resolve).toContain("pref === 'claude'");
+    expect(resolve).toContain("pref === 'kiro'");
+    // auto: claude first, kiro fallback. Order matters — historical
+    // installs must keep working when GSTACK_HOST is unset.
+    expect(resolve).toContain('tryClaude() ?? tryKiro()');
+  });
+
+  test('BROWSE_TERMINAL_BINARY override wins over host routing', () => {
+    // The test override has been in place since the integration tests
+    // first landed (commit history for terminal-agent.ts). It lets us
+    // spawn /bin/bash without requiring claude or kiro-cli on CI runners.
+    // Lock it in source-level so a future refactor can't accidentally
+    // move the override check behind the env-var branch.
+    const resolve = AGENT_SRC.slice(AGENT_SRC.indexOf('function resolveAgent'));
+    const pref = resolve.indexOf('readHostPreference');
+    const override = resolve.indexOf('BROWSE_TERMINAL_BINARY');
+    expect(override).toBeGreaterThan(-1);
+    expect(pref).toBeGreaterThan(-1);
+    // Override must be evaluated BEFORE the host preference — otherwise
+    // GSTACK_HOST=kiro on a CI runner without kiro-cli installed would
+    // short-circuit and the integration tests would never reach bash.
+    expect(override).toBeLessThan(pref);
+  });
+
+  test('error payload is host-aware on lazy-spawn failure', () => {
+    const messageHandler = AGENT_SRC.slice(AGENT_SRC.indexOf('message(ws, raw)'));
+    // Back-compat: CLAUDE_NOT_FOUND is still emitted when the caller did
+    // not explicitly request kiro, so older sidebars continue to show
+    // the "install claude" card unchanged.
+    expect(messageHandler).toContain('CLAUDE_NOT_FOUND');
+    // New: kiro-mode failure surfaces its own code so a future sidebar
+    // revision can show a kiro-specific install hint.
+    expect(messageHandler).toContain('KIRO_NOT_FOUND');
+    expect(messageHandler).toContain('kiro.dev');
+  });
+
+  test('writeClaudeAvailable emits both claude-available.json and agent-available.json', () => {
+    const fn = AGENT_SRC.slice(AGENT_SRC.indexOf('function writeClaudeAvailable'));
+    // Back-compat file — older extensions still read this.
+    expect(fn).toContain("'claude-available.json'");
+    // Host-aware successor — newer extensions can negotiate host choice.
+    expect(fn).toContain("'agent-available.json'");
+    // The new file must carry host + preference so consumers can show
+    // the right install hint when the pick is kiro.
+    expect(fn).toContain('host: resolvedHost');
+    expect(fn).toContain('preference');
+  });
+
+  test('/agent-available HTTP route serves the host-aware JSON payload', () => {
+    // The in-memory route matches what the extension bootstrap fetches.
+    // Locking in source-level prevents a future refactor from dropping
+    // the route silently.
+    expect(AGENT_SRC).toContain("url.pathname === '/agent-available'");
+    const route = AGENT_SRC.slice(AGENT_SRC.indexOf("url.pathname === '/agent-available'"));
+    // Must report host + preference (mirrors the file-based contract).
+    expect(route).toContain('host: agent?.host');
+    expect(route).toContain('preference: readHostPreference()');
   });
 });
 

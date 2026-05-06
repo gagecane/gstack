@@ -1,5 +1,5 @@
 /**
- * Terminal Agent — PTY-backed Claude Code terminal for the gstack browser
+ * Terminal Agent — PTY-backed coding-agent terminal for the gstack browser
  * sidebar. Translates the phoenix gbrowser PTY (cmd/gbd/terminal.go) into
  * Bun, with a few changes informed by codex's outside-voice review:
  *
@@ -11,10 +11,26 @@
  *    target.
  *  - Cookie-based auth via /internal/grant from the parent server, not a
  *    token in /health.
- *  - Lazy spawn: claude PTY is not spawned until the WS receives its first
- *    data frame. Sidebar opens that never type don't burn a claude session.
+ *  - Lazy spawn: the agent PTY is not spawned until the WS receives its
+ *    first data frame. Sidebar opens that never type don't burn a session.
  *  - PTY dies with WS close (one PTY per WS). v1.1 may add session
  *    survival; for v1 we match phoenix's lifecycle.
+ *
+ * Host routing (gsk-dvd.3). The agent can drive either the `claude` binary
+ * (default, matches historical behavior) or `kiro-cli`. The choice is
+ * controlled by the `GSTACK_HOST` env var:
+ *
+ *   GSTACK_HOST=claude   — always spawn `claude`; fail if not on PATH.
+ *   GSTACK_HOST=kiro     — always spawn `kiro-cli` (via resolveKiroCliCommand).
+ *   GSTACK_HOST=auto     — prefer claude if resolvable, else kiro-cli. This
+ *                          is the default so existing installs keep working
+ *                          unchanged.
+ *
+ * The `BROWSE_TERMINAL_BINARY` test override still wins over host routing —
+ * integration tests swap in /bin/bash without caring about host selection.
+ * Tab-awareness (`--append-system-prompt`) is a claude-only affordance;
+ * kiro-cli reads the same tabs.json / active-tab.json state files via the
+ * $B helper and doesn't need an injected system prompt.
  *
  * The PTY uses Bun's `terminal:` spawn option (verified at impl time on
  * Bun 1.3.10): pass cols/rows + a data callback; write input via
@@ -24,6 +40,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { safeUnlink } from './error-handling';
+import { resolveClaudeCommand, type ClaudeCommand } from './claude-bin';
+import { resolveKiroCliCommand, type KiroCommand } from './kiro-bin';
 
 const STATE_FILE = process.env.BROWSE_STATE_FILE || path.join(process.env.HOME || '/tmp', '.gstack', 'browse.json');
 const PORT_FILE = path.join(path.dirname(STATE_FILE), 'terminal-port');
@@ -55,18 +73,80 @@ interface PtySession {
 
 const sessions = new WeakMap<any, PtySession>(); // ws -> session
 
-/** Find claude on PATH. */
-function findClaude(): string | null {
-  // Test-only override. Lets the integration tests spawn /bin/bash instead
-  // of requiring claude to be installed on every CI runner. NEVER read in
-  // production (sidebar UI). Documented in browse/test/terminal-agent-integration.test.ts.
-  const override = process.env.BROWSE_TERMINAL_BINARY;
-  if (override && fs.existsSync(override)) return override;
-  // Bun.which is sync and respects PATH. Falls back to a small list of
-  // common install locations if PATH is stripped (e.g., launched from
-  // Conductor with a minimal env).
-  const which = (Bun as any).which?.('claude');
-  if (which) return which;
+// ─── Host routing ───────────────────────────────────────────────────────
+//
+// See header doc. The one invariant we encode programmatically: a resolved
+// agent is a (host, command, argsPrefix) triple. `unknown` is reserved for
+// the BROWSE_TERMINAL_BINARY test override — we don't know whether the
+// caller pointed us at claude, kiro-cli, or bash, so we skip host-specific
+// flags and just spawn it.
+export type AgentHost = 'claude' | 'kiro' | 'unknown';
+
+export interface ResolvedAgent {
+  host: AgentHost;
+  command: string;
+  argsPrefix: string[];
+  /** True when the override test path (`BROWSE_TERMINAL_BINARY`) picked this. */
+  fromTestOverride: boolean;
+}
+
+type HostPreference = 'claude' | 'kiro' | 'auto';
+
+/**
+ * Parse GSTACK_HOST into a normalized preference. Unknown values degrade
+ * to 'auto' rather than throwing — the agent should still boot so the
+ * bootstrap card can surface a useful error.
+ */
+export function readHostPreference(env: NodeJS.ProcessEnv = process.env): HostPreference {
+  const raw = (env.GSTACK_HOST || '').trim().toLowerCase();
+  if (raw === 'claude' || raw === 'kiro' || raw === 'auto') return raw;
+  return 'auto';
+}
+
+/**
+ * Resolve which agent binary to spawn. Precedence:
+ *   1. BROWSE_TERMINAL_BINARY override (test-only; host tagged `unknown`).
+ *   2. GSTACK_HOST=claude → claude only.
+ *   3. GSTACK_HOST=kiro   → kiro-cli only.
+ *   4. GSTACK_HOST=auto   → claude if resolvable, else kiro-cli.
+ * Returns null if no binary is available under the requested preference.
+ */
+export function resolveAgent(
+  env: NodeJS.ProcessEnv = process.env,
+): ResolvedAgent | null {
+  const override = env.BROWSE_TERMINAL_BINARY;
+  if (override && fs.existsSync(override)) {
+    return { host: 'unknown', command: override, argsPrefix: [], fromTestOverride: true };
+  }
+
+  const pref = readHostPreference(env);
+
+  const tryClaude = (): ResolvedAgent | null => {
+    const c = resolveClaudeCommand(env);
+    return c ? { host: 'claude', command: c.command, argsPrefix: c.argsPrefix, fromTestOverride: false } : null;
+  };
+  const tryKiro = (): ResolvedAgent | null => {
+    const k = resolveKiroCliCommand(env);
+    return k ? { host: 'kiro', command: k.command, argsPrefix: k.argsPrefix, fromTestOverride: false } : null;
+  };
+
+  if (pref === 'claude') return tryClaude();
+  if (pref === 'kiro') return tryKiro();
+
+  // auto: prefer claude to preserve historical default, fall back to kiro.
+  return tryClaude() ?? tryKiro();
+}
+
+/**
+ * Legacy fallback probe for the claude binary. Kept in the common list of
+ * install locations so machines without Bun.which-visible PATH entries
+ * (e.g. Conductor with a stripped env) still find their claude install.
+ *
+ * Returns a minimal ResolvedAgent shaped entry — never picked up by
+ * resolveAgent() directly; only consulted as a last-resort fallback in
+ * findAgent() below.
+ */
+function findClaudeInCommonLocations(): ResolvedAgent | null {
   const candidates = [
     '/opt/homebrew/bin/claude',
     '/usr/local/bin/claude',
@@ -75,26 +155,102 @@ function findClaude(): string | null {
     `${process.env.HOME}/.npm-global/bin/claude`,
   ];
   for (const c of candidates) {
-    try { fs.accessSync(c, fs.constants.X_OK); return c; } catch {}
+    try { fs.accessSync(c, fs.constants.X_OK); return { host: 'claude', command: c, argsPrefix: [], fromTestOverride: false }; } catch {}
   }
   return null;
 }
 
-/** Probe + persist claude availability for the bootstrap card. */
+/**
+ * Resolve the agent for the configured host. Composes resolveAgent() with
+ * the legacy fallback list so we match the pre-kiro behavior bit-for-bit
+ * when GSTACK_HOST is unset (auto) and claude lives in one of the known
+ * install locations.
+ */
+function findAgent(): ResolvedAgent | null {
+  const resolved = resolveAgent();
+  if (resolved) return resolved;
+  // Legacy fallback — only meaningful for claude lookups. If the caller
+  // explicitly requested kiro, we don't silently substitute claude.
+  const pref = readHostPreference();
+  if (pref === 'kiro') return null;
+  return findClaudeInCommonLocations();
+}
+
+/**
+ * Back-compat shim. Historical name; prefer `findAgent()` in new code.
+ * Returns the absolute path to the claude binary if (and only if) the
+ * resolved agent happens to be claude. Used by `writeClaudeAvailable`
+ * to preserve the exact extension-bootstrap contract.
+ */
+function findClaude(): string | null {
+  const agent = findAgent();
+  if (!agent) return null;
+  // The test override path reports host='unknown' — historical callers
+  // treated any discovered override as "claude is available" because the
+  // override was designed as a claude stand-in. Preserve that.
+  if (agent.host === 'claude' || agent.fromTestOverride) return agent.command;
+  return null;
+}
+
+/**
+ * Probe + persist agent availability for the bootstrap card. Writes two
+ * files atomically:
+ *
+ *   claude-available.json — back-compat contract. Extension reads this
+ *     at bootstrap to decide whether to show the "install claude" card.
+ *     In GSTACK_HOST=kiro mode this records `available: false` so the
+ *     card no longer lies — but the new code path below gives newer
+ *     extensions a richer signal.
+ *
+ *   agent-available.json  — host-aware successor. Callers that care
+ *     about which host was picked read this. Safe to consume even when
+ *     GSTACK_HOST=auto resolves to claude; `host: 'claude'` is the
+ *     happy-path value.
+ */
 function writeClaudeAvailable(): void {
   const stateDir = path.dirname(STATE_FILE);
   try { fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 }); } catch {}
-  const found = findClaude();
-  const status = {
-    available: !!found,
-    path: found || undefined,
+
+  const agent = findAgent();
+  const preference = readHostPreference();
+  const resolvedHost: AgentHost | null = agent?.host ?? null;
+
+  // claude-available.json: match the pre-kiro schema exactly. If host
+  // resolution picked something non-claude, claude is NOT available from
+  // the extension's perspective — the terminal will still start, but the
+  // bootstrap card should not claim "claude is installed". The existing
+  // "install claude" install_url is kept for continuity; the newer
+  // agent-available.json below gives a proper per-host install hint.
+  const claudePath = agent?.host === 'claude' || agent?.fromTestOverride ? agent.command : null;
+  const claudeStatus = {
+    available: !!claudePath,
+    path: claudePath || undefined,
     install_url: 'https://docs.anthropic.com/en/docs/claude-code',
     checked_at: new Date().toISOString(),
   };
-  const target = path.join(stateDir, 'claude-available.json');
-  const tmp = path.join(stateDir, `.tmp-claude-${process.pid}`);
+  writeJsonAtomic(path.join(stateDir, 'claude-available.json'), claudeStatus);
+
+  // agent-available.json: host-aware schema.
+  const agentStatus = {
+    available: !!agent,
+    host: resolvedHost,
+    path: agent?.command || undefined,
+    argsPrefix: agent?.argsPrefix?.length ? agent.argsPrefix : undefined,
+    preference,
+    install_url:
+      resolvedHost === 'kiro'
+        ? 'https://kiro.dev/docs/cli'
+        : 'https://docs.anthropic.com/en/docs/claude-code',
+    checked_at: claudeStatus.checked_at,
+  };
+  writeJsonAtomic(path.join(stateDir, 'agent-available.json'), agentStatus);
+}
+
+function writeJsonAtomic(target: string, value: unknown): void {
+  const dir = path.dirname(target);
+  const tmp = path.join(dir, `.tmp-${path.basename(target)}-${process.pid}`);
   try {
-    fs.writeFileSync(tmp, JSON.stringify(status, null, 2), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, target);
   } catch {
     safeUnlink(tmp);
@@ -140,15 +296,16 @@ function buildTabAwarenessHint(stateDir: string): string {
   ].join('\n');
 }
 
-/** Spawn claude in a PTY. Returns null if claude not on PATH. */
-function spawnClaude(cols: number, rows: number, onData: (chunk: Buffer) => void) {
-  const claudePath = findClaude();
-  if (!claudePath) return null;
+/** Spawn the configured coding agent in a PTY. Returns null if none resolved. */
+function spawnAgent(cols: number, rows: number, onData: (chunk: Buffer) => void) {
+  const agent = findAgent();
+  if (!agent) return null;
 
-  // Match phoenix env so claude knows which browse server to talk to and
-  // doesn't try to autostart its own. BROWSE_HEADED=1 keeps the existing
-  // headed-mode browser; BROWSE_NO_AUTOSTART prevents claude's gstack
-  // tooling from racing to spawn another server.
+  // Match phoenix env so the agent knows which browse server to talk to
+  // and doesn't try to autostart its own. BROWSE_HEADED=1 keeps the
+  // existing headed-mode browser; BROWSE_NO_AUTOSTART prevents the
+  // gstack tooling inside the spawned agent from racing to spawn another
+  // server.
   const env: Record<string, string> = {
     ...process.env as any,
     BROWSE_PORT: String(BROWSE_SERVER_PORT),
@@ -159,15 +316,21 @@ function spawnClaude(cols: number, rows: number, onData: (chunk: Buffer) => void
     COLORTERM: 'truecolor',
   };
 
-  // --append-system-prompt is the right injection surface (per `claude --help`):
-  // it gets appended to the model's system prompt, so claude treats this as
+  // --append-system-prompt is a claude-only affordance. Per `claude --help`,
+  // it gets appended to the model's system prompt so claude treats this as
   // contextual guidance, not a user message. Don't use a leading PTY write
   // for this — that would show up as if the user typed the hint, polluting
-  // the visible transcript.
+  // the visible transcript. kiro-cli has no equivalent today; it discovers
+  // tab state by reading the same tabs.json / active-tab.json files on
+  // demand through $B helpers.
   const stateDir = path.dirname(STATE_FILE);
-  const tabHint = buildTabAwarenessHint(stateDir);
+  const args = [...agent.argsPrefix];
+  if (agent.host === 'claude') {
+    const tabHint = buildTabAwarenessHint(stateDir);
+    args.push('--append-system-prompt', tabHint);
+  }
 
-  const proc = (Bun as any).spawn([claudePath, '--append-system-prompt', tabHint], {
+  const proc = (Bun as any).spawn([agent.command, ...args], {
     terminal: {
       rows,
       cols,
@@ -176,6 +339,15 @@ function spawnClaude(cols: number, rows: number, onData: (chunk: Buffer) => void
     env,
   });
   return proc;
+}
+
+/**
+ * Back-compat shim. Older callers (and some tests) expect a spawnClaude
+ * symbol; retain it so source-level assertions still find the function
+ * name. Internally delegates to the host-agnostic spawner above.
+ */
+function spawnClaude(cols: number, rows: number, onData: (chunk: Buffer) => void) {
+  return spawnAgent(cols, rows, onData);
 }
 
 /** Cleanup a PTY session: SIGINT, then SIGKILL after 3s. */
@@ -236,10 +408,30 @@ function buildServer() {
       }
 
       // /claude-available — bootstrap card hits this when user clicks "I installed it".
+      // Kept for back-compat with older sidebar builds. See /agent-available
+      // below for the host-aware successor.
       if (url.pathname === '/claude-available' && req.method === 'GET') {
         writeClaudeAvailable();
-        const found = findClaude();
-        return new Response(JSON.stringify({ available: !!found, path: found }), {
+        const claudePath = findClaude();
+        return new Response(JSON.stringify({ available: !!claudePath, path: claudePath }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // /agent-available — host-aware availability probe. Mirrors the
+      // claude-available payload but also reports which host the daemon
+      // resolved so newer sidebar builds can show the right install hint
+      // and error messaging. Safe for old sidebars to ignore.
+      if (url.pathname === '/agent-available' && req.method === 'GET') {
+        writeClaudeAvailable();
+        const agent = findAgent();
+        return new Response(JSON.stringify({
+          available: !!agent,
+          host: agent?.host ?? null,
+          path: agent?.command ?? null,
+          preference: readHostPreference(),
+        }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -358,25 +550,40 @@ function buildServer() {
           return;
         }
 
-        // Binary input. Lazy-spawn claude on the first byte.
+        // Binary input. Lazy-spawn the agent on the first byte.
         if (!session.spawned) {
           session.spawned = true;
           const proc = spawnClaude(session.cols, session.rows, (chunk) => {
             try { ws.sendBinary(chunk); } catch {}
           });
           if (!proc) {
+            // Host-aware error reporting. Default to the historical
+            // CLAUDE_NOT_FOUND code so older sidebars continue to show
+            // the "install claude" card unchanged. When the operator
+            // explicitly requested kiro, surface KIRO_NOT_FOUND so the
+            // card (when updated) can link to the kiro install docs
+            // instead. The generic error envelope still carries a
+            // human-readable message either way.
+            const pref = readHostPreference();
+            const payload = pref === 'kiro' ? {
+              type: 'error',
+              code: 'KIRO_NOT_FOUND',
+              host: 'kiro',
+              message: 'kiro-cli not on PATH. Install: https://kiro.dev/docs/cli — or set GSTACK_KIRO_BIN to an explicit binary.',
+            } : {
+              type: 'error',
+              code: 'CLAUDE_NOT_FOUND',
+              host: pref === 'auto' ? 'auto' : 'claude',
+              message: 'claude CLI not on PATH. Install: https://docs.anthropic.com/en/docs/claude-code',
+            };
             try {
-              ws.send(JSON.stringify({
-                type: 'error',
-                code: 'CLAUDE_NOT_FOUND',
-                message: 'claude CLI not on PATH. Install: https://docs.anthropic.com/en/docs/claude-code',
-              }));
-              ws.close(4404, 'claude not found');
+              ws.send(JSON.stringify(payload));
+              ws.close(4404, `${payload.host} not found`);
             } catch {}
             return;
           }
           session.proc = proc;
-          // Watch for child exit so the WS closes cleanly when claude exits.
+          // Watch for child exit so the WS closes cleanly when the agent exits.
           proc.exited?.then?.(() => {
             try { ws.close(1000, 'pty exited'); } catch {}
           });
@@ -533,7 +740,11 @@ function main() {
   // Parent learns INTERNAL_TOKEN via env (TERMINAL_AGENT_INTERNAL_TOKEN below).
   // We just print it on stdout for the supervising process to pick up if it's
   // not already in env. Defense against env races at spawn time.
-  console.log(`[terminal-agent] listening on 127.0.0.1:${port} pid=${process.pid}`);
+  const agent = findAgent();
+  const hostTag = agent
+    ? (agent.fromTestOverride ? `override(${agent.command})` : `${agent.host}@${agent.command}`)
+    : 'no-agent';
+  console.log(`[terminal-agent] listening on 127.0.0.1:${port} pid=${process.pid} host=${hostTag} preference=${readHostPreference()}`);
 
   // Cleanup port file on exit.
   const cleanup = () => { safeUnlink(PORT_FILE); process.exit(0); };
