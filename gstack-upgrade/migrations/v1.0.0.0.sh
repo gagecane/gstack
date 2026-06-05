@@ -24,10 +24,12 @@ if [ -f "$PROMPTED_FLAG" ]; then
   exit 0
 fi
 
-# If the user has already explicitly set explain_level (either way), count that
-# as an answer — they've made their choice, don't ask again.
-EXPLAIN_LEVEL_SET="$("${HOME}/.claude/skills/gstack/bin/gstack-config" get explain_level 2>/dev/null || true)"
-if [ -n "$EXPLAIN_LEVEL_SET" ]; then
+# If the user has already explicitly set explain_level in their config file
+# (either way), count that as an answer — they've made their choice, don't ask again.
+# We grep the config file directly rather than calling gstack-config get, because
+# gstack-config falls back to defaults and would always return non-empty.
+CONFIG_FILE="$GSTACK_HOME/config.yaml"
+if [ -f "$CONFIG_FILE" ] && grep -q '^explain_level:' "$CONFIG_FILE" 2>/dev/null; then
   touch "$PROMPTED_FLAG"
   exit 0
 fi

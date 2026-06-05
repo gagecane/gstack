@@ -378,9 +378,12 @@ describe('host-config-export.ts CLI', () => {
     const { stdout, exitCode } = run('detect');
     expect(exitCode).toBe(0);
     // The host CLI that was used to run this test should be detected.
-    // In claude-code we'd get 'claude', in kiro-cli we'd get 'kiro', etc.
-    expect(stdout.length).toBeGreaterThan(0);
-    expect(stdout).toMatch(/^(claude|kiro|codex|cursor|openclaw|hermes|factory|opencode|slate|gbrain)$/);
+    // Multiple hosts may be on PATH (e.g., both claude and kiro).
+    const hosts = stdout.split('\n').filter(Boolean);
+    expect(hosts.length).toBeGreaterThan(0);
+    for (const host of hosts) {
+      expect(host).toMatch(/^(claude|kiro|codex|cursor|openclaw|hermes|factory|opencode|slate|gbrain)$/);
+    }
   });
 
   test('unknown command exits 1', () => {
